@@ -1,0 +1,1338 @@
+openapi: 3.0.1
+info:
+  title: Library Management System API
+  description: API for managing books, users, reservations, and authentication in a library system.
+  version: 1.0.0
+servers:
+  - url: https://api.library.com
+    description: Production server
+tags:
+  - name: Authentication
+    description: Operations related to user authentication and API keys
+  - name: Books
+    description: Operations related to book management
+  - name: Users
+    description: Operations related to user management
+  - name: Reservations
+    description: Operations related to book reservations
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate a user and obtain access and refresh tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: spiderman
+                password:
+                  type: string
+                  example: withGreatPower123
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  expires_in:
+                    type: integer
+                required:
+                  - access_token
+                  - refresh_token
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Obtain a new access token using a refresh token.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+              required:
+                - refresh_token
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  expires_in:
+                    type: integer
+                required:
+                  - access_token
+                  - expires_in
+        '403':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate the current session.
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Successfully logged out
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/password-reset:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: Initiate a password reset process.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required:
+                - email
+      responses:
+        '200':
+          description: Reset link sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/api-key:
+    post:
+      tags:
+        - Authentication
+      summary: Get API key
+      description: Obtain an API key and secret key for authentication.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+              required:
+                - user_id
+      responses:
+        '201':
+          description: API key generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    type: string
+                  secret_key:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+                required:
+                  - api_key
+                  - secret_key
+                  - expires_at
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/password:
+    patch:
+      tags:
+        - Authentication
+      summary: Change password
+      description: Change the current user's password.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+              required:
+                - current_password
+                - new_password
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '400':
+          description: Weak password or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /books:
+    get:
+      tags:
+        - Books
+      summary: Get all books
+      description: Retrieve a list of books with optional filtering and pagination.
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: available
+          in: query
+          schema:
+            type: boolean
+          description: Filter by availability
+        - name: author
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Filter by author(s)
+        - name: genre
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Filter by genre(s)
+        - name: title
+          in: query
+          schema:
+            type: string
+          description: Search by title substring
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [title, published_date, author]
+          description: Field to sort by
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort order
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 100
+          description: Limit number of results
+        - name: offset
+          in: query
+          schema:
+            type: integer
+          description: Pagination offset
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
+                required:
+                  - total
+                  - limit
+                  - offset
+                  - results
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Books
+      summary: Add a new book
+      description: Add a new book to the library catalog.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+      responses:
+        '201':
+          description: Book created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  message:
+                    type: string
+                required:
+                  - id
+                  - message
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict (e.g., duplicate ISBN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /books/{id}:
+    get:
+      tags:
+        - Books
+      summary: Get book by ID
+      description: Retrieve detailed information about a specific book.
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the book to retrieve
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Books
+      summary: Fully update a book
+      description: Replace all book information.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the book to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+      responses:
+        '200':
+          description: Book updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Books
+      summary: Partially update a book
+      description: Update specific fields of a book.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the book to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookUpdate'
+      responses:
+        '200':
+          description: Book updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Books
+      summary: Delete a book
+      description: Remove a book from the catalog.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the book to delete
+      responses:
+        '204':
+          description: Book deleted successfully
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users:
+    post:
+      tags:
+        - Users
+      summary: Create a new user
+      description: Register a new user in the system.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Users
+      summary: Get all users
+      description: Retrieve a list of users with optional filtering.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [reader, librarian, admin]
+          description: Filter by role
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Limit number of results
+        - name: offset
+          in: query
+          schema:
+            type: integer
+          description: Pagination offset
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      description: Retrieve detailed information about a specific user.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to retrieve
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Users
+      summary: Fully update a user
+      description: Replace all user information.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Users
+      summary: Partially update a user
+      description: Update specific fields of a user.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete a user
+      description: Remove a user from the system.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the user to delete
+      responses:
+        '204':
+          description: User deleted successfully
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reservations:
+    post:
+      tags:
+        - Reservations
+      summary: Create a new reservation
+      description: Reserve a book for a specific period.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationInput'
+      responses:
+        '201':
+          description: Reservation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict (e.g., book already reserved)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Reservations
+      summary: Get all reservations
+      description: Retrieve a list of reservations with optional filtering.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+          description: Filter by user ID
+        - name: book_id
+          in: query
+          schema:
+            type: integer
+          description: Filter by book ID
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, returned, overdue]
+          description: Filter by status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 50
+          description: Limit number of results
+        - name: offset
+          in: query
+          schema:
+            type: integer
+          description: Pagination offset
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReservationWithBook'
+                  meta:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                    required:
+                      - total
+                      - limit
+                      - offset
+                required:
+                  - data
+                  - meta
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reservations/{id}:
+    get:
+      tags:
+        - Reservations
+      summary: Get reservation by ID
+      description: Retrieve detailed information about a specific reservation.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the reservation to retrieve
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationWithBook'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Reservation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Reservations
+      summary: Fully update a reservation
+      description: Replace all reservation information.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the reservation to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationInput'
+      responses:
+        '200':
+          description: Reservation updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Reservation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Reservations
+      summary: Partially update a reservation
+      description: Update specific fields of a reservation.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the reservation to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationUpdate'
+      responses:
+        '200':
+          description: Reservation updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Reservation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Reservations
+      summary: Cancel a reservation
+      description: Remove a reservation from the system.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-API-Key'
+        - $ref: '#/components/parameters/X-Signature'
+        - $ref: '#/components/parameters/X-Timestamp'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the reservation to cancel
+      responses:
+        '204':
+          description: Reservation canceled successfully
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Reservation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    X-API-Key:
+      name: X-API-Key
+      in: header
+      required: true
+      schema:
+        type: string
+    X-Signature:
+      name: X-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+    X-Timestamp:
+      name: X-Timestamp
+      in: header
+      required: true
+      schema:
+        type: string
+        format: date-time
+  schemas:
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+        isbn:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        genres:
+          type: array
+          items:
+            type: string
+        published_date:
+          type: string
+          format: date
+        description:
+          type: string
+        available:
+          type: boolean
+        available_copies:
+          type: integer
+      required:
+        - id
+        - isbn
+        - title
+        - authors
+        - genres
+
+    BookInput:
+      type: object
+      properties:
+        isbn:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        genres:
+          type: array
+          items:
+            type: string
+        published_date:
+          type: string
+          format: date
+        description:
+          type: string
+        available:
+          type: boolean
+        available_copies:
+          type: integer
+      required:
+        - isbn
+        - title
+        - authors
+        - genres
+        - available_copies
+
+    BookUpdate:
+      type: object
+      properties:
+        description:
+          type: string
+        available:
+          type: boolean
+        available_copies:
+          type: integer
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [reader, librarian, admin]
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - username
+        - email
+        - role
+        - active
+        - created_at
+
+    UserInput:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [reader, librarian, admin]
+        active:
+          type: boolean
+      required:
+        - username
+        - email
+        - password
+
+    UserUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+        active:
+          type: boolean
+        role:
+          type: string
+          enum: [reader, librarian, admin]
+
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        status:
+          type: string
+          enum: [active, returned, overdue]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - user_id
+        - book_id
+        - status
+        - start_date
+        - end_date
+
+    ReservationWithBook:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        book_title:
+          type: string
+        status:
+          type: string
+          enum: [active, returned, overdue]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+      required:
+        - id
+        - user_id
+        - book_id
+        - status
+
+    ReservationInput:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+      required:
+        - user_id
+        - book_id
+        - start_date
+        - end_date
+
+    ReservationUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, returned, overdue]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+          required:
+            - code
+            - message
+      required:
+        - error

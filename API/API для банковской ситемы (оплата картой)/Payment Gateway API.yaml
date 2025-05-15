@@ -1,0 +1,961 @@
+openapi: 3.0.2
+info:
+  title: Acquiring bank API
+  version: 1.0.0
+  description: Комплексный API для обработки транзакций, управления продавцами (клиентами банка-эквайера) и счетами. 
+
+servers:
+  - url: https://bank.com/api/v1
+    description: Production server
+
+paths:
+  /:
+    get:
+      tags: [Root]
+      summary: "Точка входа со ссылками на HATEOAS"
+      description: "Возвращает доступные ресурсы API с гипермедийными ссылками"
+      operationId: getRoot
+      responses:
+        '200':
+          description: "API root resources"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  _links:
+                    type: object
+                    properties:
+                      transactions:
+                        type: object
+                        properties:
+                          href:
+                            type: string
+                            example: "/transactions"
+                      sellers:
+                        type: object
+                        properties:
+                          href:
+                            type: string
+                            example: "/sellers"
+                      accounts:
+                        type: object
+                        properties:
+                          href:
+                            type: string
+                            example: "/accounts"
+              examples:
+                apiRoot:
+                  value:
+                    _links:
+                      transactions:
+                        href: "/transactions"
+                      sellers:
+                        href: "/sellers"
+                      accounts:
+                        href: "/accounts"
+
+  # ==================== Transactions ====================
+  /transactions:
+    post:
+      tags: [Transactions]
+      summary: Инициация платежа
+      operationId: createTransaction
+      security:
+        - OAuth2: [transactions.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreateRequest'
+            examples:
+              terminalPayment:
+                value:
+                  card_id: 123
+                  terminal_id: 456
+                  amount: 1500.00
+                  currency: "RUB"
+                  payment_method: "terminal"
+                  seller_account: "40702810500000012345"
+                  buyer_account: "40817810500000054321"
+                  is_authorized: true
+      responses:
+        '201':
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+              examples:
+                success:
+                  value:
+                    transaction_id: "txn_123456789"
+                    status: "В процессе"
+                    amount: 1500.00
+                    currency: "RUB"
+                    timestamp: "2023-10-15T14:30:22Z"
+                    is_authorized: true
+                    "_links": {
+    "self": { "href": "/transactions/txn_123456789" },
+    "receipt": { "href": "/transactions/txn_123456789/receipt" }
+  }
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidAmount:
+                  value:
+                    error_code: "INVALID_AMOUNT"
+                    message: "Amount must be positive"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    get:
+      tags: [Transactions]
+      summary: Поиск транзакции по фильтрам
+      operationId: searchTransactions
+      security:
+        - OAuth2: [transactions.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: buyer_account
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [В процессе, Успешно, Отклонена, Аннулирована]
+        - name: amount_from
+          in: query
+          schema:
+            type: number
+        - name: amount_to
+          in: query
+          schema:
+            type: number
+        - name: seller_id
+          in: query
+          schema:
+            type: integer
+        - name: is_authorized
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
+        '404':
+          description: No transactions found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "NO_TRANSACTIONS"
+                    message: "No transactions matching criteria"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  /transactions/{transaction_id}:
+    get:
+      tags: [Transactions]
+      summary: Получить информацию о транзакции по ID
+      operationId: getTransactionById
+      security:
+        - OAuth2: [transactions.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetails'
+              examples:
+                success:
+                  value:
+                    transaction_id: "txn_123456789"
+                    card_id: 123
+                    terminal_id: 456
+                    amount: 1500.00
+                    status: "Успешно"
+                    timestamp: "2023-10-15T14:30:22Z"
+                    is_authorized: true
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "TRANSACTION_NOT_FOUND"
+                    message: "Transaction not found"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    patch:
+      tags: [Transactions]
+      summary: Обновление статуса транзакции
+      operationId: updateTransactionStatus
+      security:
+        - OAuth2: [transactions.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionStatusUpdate'
+            examples:
+              cancel:
+                value:
+                  status: "Аннулирована"
+                  reason: "Customer request"
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '409':
+          description: Status conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                conflict:
+                  value:
+                    error_code: "STATUS_CONFLICT" 
+                    message: "Cannot change status from 'Успешно' to 'В процессе'"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  /transactions/{transaction_id}/receipt:
+    get:
+      tags: [Transactions]
+      summary: Получить квитанцию по транзакции
+      operationId: getTransactionReceipt
+      security:
+        - OAuth2: [transactions.receipts.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Receipt PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Receipt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "RECEIPT_NOT_FOUND"
+                    message: "Receipt not available"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  # ==================== Sellers ====================
+  /sellers:
+    post:
+      tags: [Sellers]
+      summary: Создать нового продавца
+      operationId: createSeller
+      security:
+        - OAuth2: [sellers.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerCreateRequest'
+            examples:
+              example:
+                value:
+                  legal_name: "ООО Ромашка"
+                  contact_email: "info@romashka.ru"
+                  contact_phone: "+79991234567"
+                  bank_account: 123456
+                  TIN: "123456789012"
+                  OKPO: "12345678"
+                  OKVED: "62.01"
+                  OGRN_OGRNIP: "123456789012345"
+                  legal_address: "г. Москва, ул. Ленина, д.1"
+                  actual_address: "г. Москва, ул. Ленина, д.2"
+      responses:
+        '201':
+          description: Seller created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidTin:
+                  value:
+                    error_code: "INVALID_TIN"
+                    message: "TIN must contain only digits"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    get:
+      tags: [Sellers]
+      summary: Получить информацию по продавцам с учётом фильтров
+      operationId: searchSellers
+      security:
+        - OAuth2: [sellers.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: Поиск по части имени
+      responses:
+        '200':
+          description: List of sellers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SellerResponse'
+        '400':
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidQuery:
+                  value:
+                    error_code: "INVALID_QUERY"
+                    message: "Name parameter too short"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  /sellers/{seller_id}:
+    get:
+      tags: [Sellers]
+      summary: Получить информацию о продавце по ID
+      operationId: getSellerById
+      security:
+        - OAuth2: [sellers.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: seller_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Seller details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerDetails'
+        '404':
+          description: Seller not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "SELLER_NOT_FOUND"
+                    message: "Seller not found"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    put:
+      tags: [Sellers]
+      summary: Обновить полностью информацию о продавце
+      operationId: updateSeller
+      security:
+        - OAuth2: [sellers.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerUpdateRequest'
+      responses:
+        '200':
+          description: Seller updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidData:
+                  value:
+                    error_code: "INVALID_DATA"
+                    message: "Invalid seller data"
+                    details: ["TIN must contain only digits"]
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+        '404':
+          description: Seller not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "SELLER_NOT_FOUND"
+                    message: "Seller with ID 123 not found"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                validationError:
+                  value:
+                    error_code: "VALIDATION_ERROR"
+                    message: "Data validation failed"
+                    details: ["Invalid OGRN format"]
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+    patch:
+      tags: [Sellers]
+      summary: Обновить частично данные продавца
+      operationId: partialUpdateSeller
+      security:
+        - OAuth2: [sellers.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerPartialUpdate'
+      responses:
+        '200':
+          description: Seller updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidData:
+                  value:
+                    error_code: "INVALID_DATA"
+                    message: "Invalid update data"
+                    details: ["Email must be a valid address"]
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+        '404':
+          description: Seller not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "SELLER_NOT_FOUND"
+                    message: "Seller with ID 123 not found"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                validationError:
+                  value:
+                    error_code: "VALIDATION_ERROR"
+                    message: "Data validation failed"
+                    details: ["Phone must be in international format"]
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  # ==================== Accounts ====================
+  /accounts:
+    post:
+      tags: [Accounts]
+      summary: Создать счёт
+      operationId: createAccount
+      security:
+        - OAuth2: [accounts.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreateRequest'
+            examples:
+              example:
+                value:
+                  current_account: "40702810500000012345"
+                  BIC: "044525225"
+                  status: "активный"
+                  opening_date: "2023-01-01"
+                  closing_date: "2025-12-31"
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBic:
+                  value:
+                    error_code: "INVALID_BIC"
+                    message: "BIC must be 9 digits"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    get:
+      tags: [Accounts]
+      summary: Найти счет по фильтрам
+      operationId: searchAccounts
+      security:
+        - OAuth2: [accounts.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: seller_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [активный, закрыт, на проверке, приостановлен]
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: No accounts found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "NO_ACCOUNTS"
+                    message: "No accounts matching criteria"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  /accounts/{account_id}:
+    get:
+      tags: [Accounts]
+      summary: Найти счёт по ID
+      operationId: getAccountById
+      security:
+        - OAuth2: [accounts.read]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetails'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    error_code: "ACCOUNT_NOT_FOUND"
+                    message: "Account not found"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    patch:
+      tags: [Accounts]
+      summary: Обновить статсус счёта
+      operationId: updateAccountStatus
+      security:
+        - OAuth2: [accounts.write]
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountStatusUpdate'
+            examples:
+              example:
+                value:
+                  status: "закрыт"
+                  reason: "Запрос на закрытие счета"
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '409':
+          description: Status conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                conflict:
+                  value:
+                    error_code: "STATUS_CONFLICT"
+                    message: "Cannot close account with positive balance"
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.paymentgateway.com/oauth/token
+          scopes:
+            transactions.read: "Read transactions"
+            transactions.write: "Write transactions"
+            transactions.receipts.read: "Read receipts"
+            sellers.read: "Read sellers"
+            sellers.write: "Write sellers"
+            accounts.read: "Read accounts"
+            accounts.write: "Write accounts"
+
+  parameters:
+    X-Request-ID:
+      in: header
+      name: X-Request-ID
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique request identifier
+
+  schemas:
+    # Transaction schemas
+    TransactionCreateRequest:
+      type: object
+      required: [card_id, amount, currency, payment_method, seller_account, buyer_account]
+      properties:
+        card_id:
+          type: integer
+        terminal_id:
+          type: integer
+        online_payment_id:
+          type: integer
+        amount:
+          type: number
+          minimum: 0.01
+          format: float
+        currency:
+          type: string
+          maxLength: 3
+        payment_method:
+          type: string
+          enum: [terminal, website]
+        seller_account:
+          type: string
+        buyer_account:
+          type: string
+        is_authorized:
+          type: boolean
+
+    TransactionResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+        status:
+          type: string
+          enum: [В процессе, Успешно, Отклонена, Аннулирована]
+        amount:
+          type: number
+        currency:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        is_authorized:
+          type: boolean
+
+    TransactionDetails:
+      allOf:
+        - $ref: '#/components/schemas/TransactionResponse'
+        - type: object
+          properties:
+            card_id:
+              type: integer
+            terminal_id:
+              type: integer
+            online_payment_id:
+              type: integer
+            seller_account:
+              type: string
+            buyer_account:
+              type: string
+
+    TransactionStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [В процессе, Успешно, Отклонена, Аннулирована]
+        reason:
+          type: string
+          maxLength: 255
+
+    # Seller schemas
+    SellerCreateRequest:
+      type: object
+      required: [legal_name, TIN]
+      properties:
+        legal_name:
+          type: string
+          maxLength: 100
+        contact_email:
+          type: string
+          format: email
+          maxLength: 100
+        contact_phone:
+          type: string
+          maxLength: 30
+        bank_account:
+          type: integer
+        TIN:
+          type: string
+          pattern: '^\d+$'
+          maxLength: 15
+        OKPO:
+          type: string
+          pattern: '^\d{8}$'
+        OKVED:
+          type: string
+          maxLength: 10
+        OGRN_OGRNIP:
+          type: string
+          maxLength: 15
+        legal_address:
+          type: string
+          maxLength: 255
+        actual_address:
+          type: string
+          maxLength: 255
+
+    SellerUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/SellerCreateRequest'
+
+    SellerPartialUpdate:
+      type: object
+      properties:
+        contact_email:
+          type: string
+          format: email
+        contact_phone:
+          type: string
+        actual_address:
+          type: string
+
+    SellerResponse:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+        legal_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SellerDetails:
+      allOf:
+        - $ref: '#/components/schemas/SellerResponse'
+        - type: object
+          properties:
+            contact_email:
+              type: string
+            contact_phone:
+              type: string
+            bank_account:
+              type: integer
+            TIN:
+              type: string
+            OKPO:
+              type: string
+            OKVED:
+              type: string
+            OGRN_OGRNIP:
+              type: string
+            legal_address:
+              type: string
+            actual_address:
+              type: string
+
+    # Account schemas
+    AccountCreateRequest:
+      type: object
+      required: [current_account, status, opening_date]
+      properties:
+        current_account:
+          type: string
+          maxLength: 20
+        BIC:
+          type: string
+          pattern: '^\d{9}$'
+        status:
+          type: string
+          enum: [активный, закрыт, на проверке, приостановлен]
+        opening_date:
+          type: string
+          format: date
+        closing_date:
+          type: string
+          format: date
+
+    AccountStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [активный, закрыт, на проверке, приостановлен]
+        reason:
+          type: string
+          maxLength: 255
+
+    AccountResponse:
+      type: object
+      properties:
+        account_id:
+          type: integer
+        current_account:
+          type: string
+        status:
+          type: string
+        opening_date:
+          type: string
+          format: date
+
+    AccountDetails:
+      allOf:
+        - $ref: '#/components/schemas/AccountResponse'
+        - type: object
+          properties:
+            BIC:
+              type: string
+            closing_date:
+              type: string
+              format: date
+
+    # Common schemas
+    Error:
+      type: object
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+          format: uuid
+        details:
+          type: array
+          items:
+            type: string
+      required: [error_code, message, request_id]
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              value:
+                error_code: "NOT_FOUND"
+                message: "Requested resource not found"
+                request_id: "550e8400-e29b-41d4-a716-446655440000"

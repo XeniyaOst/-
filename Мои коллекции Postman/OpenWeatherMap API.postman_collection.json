@@ -1,0 +1,167 @@
+{
+	"info": {
+		"_postman_id": "c8e87222-b3a9-4aca-ad05-d290aa36a8a3",
+		"name": "OpenWeatherMap API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "42659468"
+	},
+	"item": [
+		{
+			"name": "Текущий прогноз",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.openweathermap.org/data/2.5/weather?zip=95050&units=imperial&appid=ef03d6f1fbcf3b61046c141a2719fe0e",
+					"protocol": "https",
+					"host": [
+						"api",
+						"openweathermap",
+						"org"
+					],
+					"path": [
+						"data",
+						"2.5",
+						"weather"
+					],
+					"query": [
+						{
+							"key": "zip",
+							"value": "95050"
+						},
+						{
+							"key": "units",
+							"value": "imperial"
+						},
+						{
+							"key": "appid",
+							"value": "ef03d6f1fbcf3b61046c141a2719fe0e"
+						}
+					]
+				},
+				"description": "gets the current weather for 95050 in imperial units."
+			},
+			"response": [
+				{
+					"name": "Текущий прогноз",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.openweathermap.org/data/2.5/weather?zip=95050&units=imperial&appid=ef03d6f1fbcf3b61046c141a2719fe0e",
+							"protocol": "https",
+							"host": [
+								"api",
+								"openweathermap",
+								"org"
+							],
+							"path": [
+								"data",
+								"2.5",
+								"weather"
+							],
+							"query": [
+								{
+									"key": "zip",
+									"value": "95050"
+								},
+								{
+									"key": "units",
+									"value": "imperial"
+								},
+								{
+									"key": "appid",
+									"value": "ef03d6f1fbcf3b61046c141a2719fe0e"
+								}
+							]
+						}
+					},
+					"_postman_previewlanguage": null,
+					"header": null,
+					"cookie": [],
+					"body": null
+				}
+			]
+		},
+		{
+			"name": "5-дневный прогноз",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.openweathermap.org/data/2.5/weather?lon=-121.9689848&units=imperial&appid=ef03d6f1fbcf3b61046c141a2719fe0e&lat=37.3565982",
+					"protocol": "https",
+					"host": [
+						"api",
+						"openweathermap",
+						"org"
+					],
+					"path": [
+						"data",
+						"2.5",
+						"weather"
+					],
+					"query": [
+						{
+							"key": "lon",
+							"value": "-121.9689848"
+						},
+						{
+							"key": "units",
+							"value": "imperial"
+						},
+						{
+							"key": "appid",
+							"value": "ef03d6f1fbcf3b61046c141a2719fe0e"
+						},
+						{
+							"key": "lat",
+							"value": "37.3565982"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "С изменными параметрами локации",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.openweathermap.org/data/2.5/weather?lat=37.3565982&lon=-121.9689848&units=imperial&appid=ef03d6f1fbcf3b61046c141a2719fe0e",
+					"protocol": "https",
+					"host": [
+						"api",
+						"openweathermap",
+						"org"
+					],
+					"path": [
+						"data",
+						"2.5",
+						"weather"
+					],
+					"query": [
+						{
+							"key": "lat",
+							"value": "37.3565982"
+						},
+						{
+							"key": "lon",
+							"value": "-121.9689848"
+						},
+						{
+							"key": "units",
+							"value": "imperial"
+						},
+						{
+							"key": "appid",
+							"value": "ef03d6f1fbcf3b61046c141a2719fe0e"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
